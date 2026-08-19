@@ -1,8 +1,8 @@
-import { NextRequest, NextResponse } from "next/server";
+﻿import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 
 const SYSTEM_PROMPT = `You are SalonPro AI, a business assistant for Ghanaian barbershop owners.
-You have access to the shop's business data and help owners make smart decisions.
+You have access to the shop'\''s business data and help owners make smart decisions.
 Be concise, practical, and culturally relevant to the Ghanaian barbering market.
 Always respond in a friendly, professional tone. Use GHS for currency.
 When giving advice, be specific and actionable.`;
@@ -104,9 +104,9 @@ export async function POST(req: NextRequest) {
 ${context.topServices.map((s) => `- ${s.name}: ${s.count} bookings`).join("\n")}
 `;
 
-  const apiKey = process.env.ANTHROPIC_API_KEY;
+  const apiKey = process.env.DEEPSEEK_API_KEY;
 
-  // If no Anthropic API key, use rule-based responses
+  // If no DeepSeek API key, use rule-based responses
   if (!apiKey) {
     const reply = generateFallbackResponse(message, context);
     return NextResponse.json({ reply, context: { shopName: shop.name } });
@@ -114,28 +114,27 @@ ${context.topServices.map((s) => `- ${s.name}: ${s.count} bookings`).join("\n")}
 
   try {
     const messages = [
+      { role: "system", content: `${SYSTEM_PROMPT}\n\n${contextBlock}` },
       ...(history ?? []),
       { role: "user", content: message },
     ];
 
-    const response = await fetch("https://api.anthropic.com/v1/messages", {
+    const response = await fetch("https://api.deepseek.com/v1/chat/completions", {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        "x-api-key": apiKey,
-        "anthropic-version": "2023-06-01",
+        "Authorization": `Bearer ${apiKey}`,
       },
       body: JSON.stringify({
-        model: "claude-haiku-4-5-20251001",
+        model: "deepseek-chat",
         max_tokens: 500,
-        system: `${SYSTEM_PROMPT}\n\n${contextBlock}`,
         messages,
       }),
     });
 
     if (!response.ok) throw new Error("API error");
     const data = await response.json();
-    const reply = data.content?.[0]?.text ?? "I couldn't process that. Please try again.";
+    const reply = data.choices?.[0]?.message?.content ?? "I couldn'\''t process that. Please try again.";
 
     return NextResponse.json({ reply, context: { shopName: shop.name } });
   } catch {
@@ -153,9 +152,9 @@ function generateFallbackResponse(message: string, ctx: BusinessContext): string
   if (msg.includes("no show") || msg.includes("noshow") || msg.includes("miss")) {
     const rate = (ctx.metrics.noShowRate * 100).toFixed(1);
     if (parseFloat(rate) > 15) {
-      return `Your no-show rate is ${rate}% — that's above average. Require deposits for new customers and send WhatsApp reminders 2 hours before appointments. This usually cuts no-shows by 40-60%.`;
+      return `Your no-show rate is ${rate}% — that'\''s above average. Require deposits for new customers and send WhatsApp reminders 2 hours before appointments. This usually cuts no-shows by 40-60%.`;
     }
-    return `Your no-show rate is ${rate}% — that's good! Keep sending reminders to maintain this.`;
+    return `Your no-show rate is ${rate}% — that'\''s good! Keep sending reminders to maintain this.`;
   }
   if (msg.includes("queue") || msg.includes("wait")) {
     return `You have ${ctx.metrics.queueToday} people in queue today. To reduce wait times, encourage advance bookings and consider adding another barber on busy days. Peak hours in Ghanaian shops are typically 10am-12pm and 4pm-7pm.`;
@@ -171,5 +170,5 @@ function generateFallbackResponse(message: string, ctx: BusinessContext): string
     return `Based on your shop data: 1) Your no-show rate is ${(ctx.metrics.noShowRate * 100).toFixed(0)}% — ${ctx.metrics.noShowRate > 0.15 ? "reduce this by requiring deposits" : "great job keeping this low"}. 2) You have ${ctx.metrics.uniqueCustomers} regular customers — try a loyalty reward campaign to retain them. 3) This week you earned GHS ${ctx.revenueThisWeek.toFixed(0)} — aim for 10% more next week by upselling beard trims.`;
   }
 
-  return `I'm SalonPro AI for ${ctx.shop.name}. I can help you with revenue analysis, reducing no-shows, customer retention, service optimization, and business growth strategies. What would you like to know?`;
+  return `I'\''m SalonPro AI for ${ctx.shop.name}. I can help you with revenue analysis, reducing no-shows, customer retention, service optimization, and business growth strategies. What would you like to know?`;
 }
