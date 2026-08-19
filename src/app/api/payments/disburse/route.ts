@@ -74,11 +74,15 @@ export async function POST(req: NextRequest) {
         );
 
         const transferStatus = typeof transfer.data?.txstatus === "number" ? transfer.data.txstatus : null;
+        const transferMessage = Array.isArray(transfer.message)
+          ? transfer.message.join("; ")
+          : transfer.message ?? "Transfer initiated";
+
         results.push({
           recipient: recipient.phoneNumber,
           name: recipient.name,
           status: transferStatus === 1 ? "SUCCESS" : "FAILED",
-          message: transfer.message ?? "Transfer initiated",
+          message: transferMessage,
           validatedName,
           externalRef,
           txStatus: transferStatus,

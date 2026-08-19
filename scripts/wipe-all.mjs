@@ -31,7 +31,7 @@ if (!directUrl) {
 
 if (!directUrl) {
   console.error("❌  DIRECT_URL not found in .env.local or environment.");
-  console.error("    Set DIRECT_URL to your Supabase direct connection (port 5432).");
+  console.error("    Set DIRECT_URL to your local Postgres connection (postgresql://postgres:postgres@localhost:5432/salonpro).");
   process.exit(1);
 }
 

@@ -25,7 +25,7 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ refe
   }
 
   try {
-    const result = await moolre.checkTransferStatus(reference);
+    const result = await moolre.checkPaymentStatus(reference);
     const succeeded = result.data?.txstatus === 1;
 
     if (succeeded) {

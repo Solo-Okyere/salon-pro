@@ -1,10 +1,28 @@
-// Moolre API client — payments (Collections), disbursements, and SMS. https://docs.moolre.com/
-const BASE_URL = process.env.MOOLRE_BASE_URL || "https://sandbox.moolre.com";
-const API_USER = process.env.MOOLRE_API_USER || "";
-const API_KEY = process.env.MOOLRE_API_KEY || "";
-const VAS_KEY = process.env.MOOLRE_VAS_KEY || "";
-const ACCOUNT_NUMBER = process.env.MOOLRE_ACCOUNT_NUMBER || "";
-const SENDER_ID = process.env.MOOLRE_SENDER_ID || "";
+// Moolre API client - payment collections, disbursements, and SMS. https://docs.moolre.com/
+const BASE_URL = (process.env.MOOLRE_BASE_URL || "https://sandbox.moolre.com").replace(/\/$/, "");
+
+type ApiCredentials = {
+  apiUser: string;
+  apiKey: string;
+  accountNumber: string;
+};
+
+const collectionCredentials: ApiCredentials = {
+  apiUser: process.env.MOOLRE_COLLECTION_API_USER || process.env.MOOLRE_API_USER || "",
+  apiKey: process.env.MOOLRE_COLLECTION_API_KEY || process.env.MOOLRE_API_KEY || "",
+  accountNumber: process.env.MOOLRE_COLLECTION_ACCOUNT_NUMBER || process.env.MOOLRE_ACCOUNT_NUMBER || "",
+};
+
+const disbursementCredentials: ApiCredentials = {
+  apiUser: process.env.MOOLRE_DISBURSEMENT_API_USER || process.env.MOOLRE_API_USER || "",
+  apiKey: process.env.MOOLRE_DISBURSEMENT_API_KEY || process.env.MOOLRE_API_KEY || "",
+  accountNumber: process.env.MOOLRE_DISBURSEMENT_ACCOUNT_NUMBER || process.env.MOOLRE_ACCOUNT_NUMBER || "",
+};
+
+const smsCredentials = {
+  vasKey: process.env.MOOLRE_SMS_VAS_KEY || process.env.MOOLRE_VAS_KEY || "",
+  senderId: process.env.MOOLRE_SMS_SENDER_ID || process.env.MOOLRE_SENDER_ID || "",
+};
 
 const CHANNEL_CODES: Record<string, string> = {
   MTN_MOMO: "13",
@@ -21,7 +39,7 @@ const DISBURSEMENT_CHANNEL_CODES: Record<string, string> = {
 type MoolreResponse<T> = {
   status: number | string;
   code: string;
-  message: string | null;
+  message: string | string[] | null;
   data: T;
 };
 
@@ -35,6 +53,8 @@ type TransferStatusData = {
   externalref: string;
   ts: string;
 };
+
+type PaymentStatusData = TransferStatusData;
 
 type AccountStatusData = {
   balance: number | string;
@@ -60,6 +80,39 @@ function normalizePhone(phone: string) {
   return phone.replace(/^\+/, "").replace(/\s+/g, "");
 }
 
+function requireValue(value: string, envName: string, feature: string) {
+  if (!value) {
+    throw new Error(`Missing ${envName}. Add it to .env before using Moolre ${feature}.`);
+  }
+  return value;
+}
+
+function apiHeaders(credentials: ApiCredentials, feature: string) {
+  return {
+    "X-API-USER": requireValue(credentials.apiUser, "MOOLRE_API_USER", feature),
+    "X-API-KEY": requireValue(credentials.apiKey, "MOOLRE_API_KEY", feature),
+  };
+}
+
+function accountNumber(credentials: ApiCredentials, feature: string) {
+  return requireValue(credentials.accountNumber, "MOOLRE_ACCOUNT_NUMBER", feature);
+}
+
+function smsHeaders() {
+  return {
+    "X-Api-VasKey": requireValue(smsCredentials.vasKey, "MOOLRE_VAS_KEY", "SMS"),
+  };
+}
+
+function smsSenderId() {
+  return requireValue(smsCredentials.senderId, "MOOLRE_SENDER_ID", "SMS");
+}
+
+function responseMessage(message: MoolreResponse<unknown>["message"]) {
+  if (Array.isArray(message)) return message.join("; ");
+  return message || "Unknown error";
+}
+
 async function moolreRequest<T>(path: string, headers: Record<string, string>, body: unknown): Promise<MoolreResponse<T>> {
   const res = await fetch(`${BASE_URL}${path}`, {
     method: "POST",
@@ -78,9 +131,7 @@ async function moolreRequest<T>(path: string, headers: Record<string, string>, b
   const parsed = json as Partial<MoolreResponse<T>>;
   const success = res.ok && (parsed.status === 1 || parsed.status === "1");
   if (!success) {
-    const message = parsed.message ?? "Unknown error";
-    const fallback = typeof message === "string" ? message : "Unknown error";
-    throw new Error(`Moolre request failed [${parsed.code ?? res.status}]: ${fallback}`);
+    throw new Error(`Moolre request failed [${parsed.code ?? res.status}]: ${responseMessage(parsed.message ?? null)}`);
   }
 
   return parsed as MoolreResponse<T>;
@@ -97,7 +148,7 @@ export async function initiatePayment(
 
   return moolreRequest<string>(
     "/open/transact/payment",
-    { "X-API-USER": API_USER, "X-API-KEY": API_KEY },
+    apiHeaders(collectionCredentials, "payment collection"),
     {
       type: 1,
       channel,
@@ -105,7 +156,7 @@ export async function initiatePayment(
       payer: normalizePhone(phone),
       amount: amount.toString(),
       externalref: reference,
-      accountnumber: ACCOUNT_NUMBER,
+      accountnumber: accountNumber(collectionCredentials, "payment collection"),
     }
   );
 }
@@ -113,10 +164,10 @@ export async function initiatePayment(
 export async function checkAccountStatus() {
   return moolreRequest<AccountStatusData>(
     "/open/account/status",
-    { "X-API-USER": API_USER, "X-API-KEY": API_KEY },
+    apiHeaders(disbursementCredentials, "disbursement"),
     {
       type: 1,
-      accountnumber: ACCOUNT_NUMBER,
+      accountnumber: accountNumber(disbursementCredentials, "disbursement"),
     }
   );
 }
@@ -127,14 +178,14 @@ export async function validateRecipientName(receiver: string, channel: "MTN" | "
 
   return moolreRequest<ValidationNameData>(
     "/open/transact/validate",
-    { "X-API-USER": API_USER, "X-API-KEY": API_KEY },
+    apiHeaders(disbursementCredentials, "disbursement"),
     {
       type: 1,
       receiver: normalizePhone(receiver),
       channel: mappedChannel,
       sublistid: "",
       currency,
-      accountnumber: ACCOUNT_NUMBER,
+      accountnumber: accountNumber(disbursementCredentials, "disbursement"),
     }
   );
 }
@@ -151,7 +202,7 @@ export async function initiateTransfer(
 
   return moolreRequest<TransferData>(
     "/open/transact/transfer",
-    { "X-API-USER": API_USER, "X-API-KEY": API_KEY },
+    apiHeaders(disbursementCredentials, "disbursement"),
     {
       type: 1,
       channel: mappedChannel,
@@ -161,7 +212,20 @@ export async function initiateTransfer(
       sublistid: "",
       externalref: reference,
       reference: description,
-      accountnumber: ACCOUNT_NUMBER,
+      accountnumber: accountNumber(disbursementCredentials, "disbursement"),
+    }
+  );
+}
+
+export async function checkPaymentStatus(reference: string) {
+  return moolreRequest<PaymentStatusData>(
+    "/open/transact/status",
+    apiHeaders(collectionCredentials, "payment collection"),
+    {
+      type: 1,
+      idtype: "externalref",
+      id: reference,
+      accountnumber: accountNumber(collectionCredentials, "payment collection"),
     }
   );
 }
@@ -169,12 +233,12 @@ export async function initiateTransfer(
 export async function checkTransferStatus(reference: string) {
   return moolreRequest<TransferStatusData>(
     "/open/transact/status",
-    { "X-API-USER": API_USER, "X-API-KEY": API_KEY },
+    apiHeaders(disbursementCredentials, "disbursement"),
     {
       type: 1,
       idtype: "externalref",
       id: reference,
-      accountnumber: ACCOUNT_NUMBER,
+      accountnumber: accountNumber(disbursementCredentials, "disbursement"),
     }
   );
 }
@@ -183,10 +247,10 @@ export async function sendSms(to: string, message: string, ref?: string) {
   const recipient = normalizePhone(to).replace(/^\+/, "").replace(/\s/g, "");
   return moolreRequest<null>(
     "/open/sms/send",
-    { "X-Api-VasKey": VAS_KEY },
+    smsHeaders(),
     {
       type: 1,
-      senderid: SENDER_ID,
+      senderid: smsSenderId(),
       messages: [{ recipient, message, ...(ref ? { ref } : {}) }],
     }
   );
@@ -197,6 +261,7 @@ export const moolre = {
   checkAccountStatus,
   validateRecipientName,
   initiateTransfer,
+  checkPaymentStatus,
   checkTransferStatus,
   sendSms,
 };

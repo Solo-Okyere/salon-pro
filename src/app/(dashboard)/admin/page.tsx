@@ -30,6 +30,11 @@ interface RegisterForm {
   shopName: string; city: string; region: string; address: string; phone: string;
 }
 
+function mutationErrorMessage(error: unknown, fallback: string) {
+  const response = (error as { response?: { data?: { error?: string; message?: string } } })?.response;
+  return response?.data?.error ?? response?.data?.message ?? fallback;
+}
+
 const REGIONS = [
   "Greater Accra","Ashanti","Western","Central","Eastern","Volta",
   "Northern","Upper East","Upper West","Bono","Ahafo","Bono East",
@@ -60,7 +65,7 @@ function RegisterModal({ onClose }: { onClose: () => void }) {
       qc.invalidateQueries({ queryKey: ["admin-stats"] });
       qc.invalidateQueries({ queryKey: ["admin-shops"] });
     },
-    onError: (e: unknown) => toast.error((e as { response?: { data?: { error?: string } } })?.response?.data?.error ?? "Failed to register shop"),
+    onError: (e: unknown) => toast.error(mutationErrorMessage(e, "Failed to register shop")),
   });
 
   const set = (k: keyof RegisterForm) =>

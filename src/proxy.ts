@@ -3,7 +3,7 @@ import { jwtVerify } from "jose";
 
 const PAGE_PROTECTED = ["/owner", "/barber", "/customer", "/staff", "/inventory", "/ai", "/admin", "/services", "/settings"];
 
-export async function proxy(req: NextRequest) {
+export default async function proxy(req: NextRequest) {
   const { pathname } = req.nextUrl;
 
   // Admin login is always public
