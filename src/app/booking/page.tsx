@@ -23,6 +23,19 @@ interface Slot { time: string; available: boolean }
 
 const fade = { hidden: { opacity: 0, x: 20 }, show: { opacity: 1, x: 0 }, exit: { opacity: 0, x: -20 } };
 
+function slotToIso(date: string, time: string) {
+  const match = time.match(/^(\d{1,2}):(\d{2})\s(AM|PM)$/i);
+  if (!match) throw new Error("Select a valid appointment time");
+
+  const [, hourValue, minuteValue, meridiem] = match;
+  let hours = Number(hourValue) % 12;
+  if (meridiem.toUpperCase() === "PM") hours += 12;
+
+  const scheduledAt = new Date(`${date}T00:00:00`);
+  scheduledAt.setHours(hours, Number(minuteValue), 0, 0);
+  return scheduledAt.toISOString();
+}
+
 function BookingFlow() {
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -77,7 +90,7 @@ function BookingFlow() {
         shopId: activeShop?.id,
         serviceId: selected.service?.id,
         barberId: selected.barber?.id,
-        scheduledAt: new Date(`${selected.date}T${selected.time}:00`).toISOString(),
+        scheduledAt: slotToIso(selected.date ?? "", selected.time ?? ""),
       };
       // Include guest details when not logged in
       if (isGuest) {
