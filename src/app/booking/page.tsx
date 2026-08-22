@@ -39,11 +39,9 @@ function slotToIso(date: string, time: string) {
 function BookingFlow() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const { user, accessToken, isAuthenticated } = useAuthStore((s) => ({
-    user: s.user,
-    accessToken: s.accessToken,
-    isAuthenticated: s.isAuthenticated,
-  }));
+  const user = useAuthStore((state) => state.user);
+  const accessToken = useAuthStore((state) => state.accessToken);
+  const isAuthenticated = useAuthStore((state) => state.isAuthenticated);
   const requestedShopId = searchParams.get("shop");
 
   const [step, setStep] = useState(() => requestedShopId ? 1 : 0);
