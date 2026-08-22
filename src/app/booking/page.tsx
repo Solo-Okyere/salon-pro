@@ -363,6 +363,12 @@ function BookingFlow() {
                     <div className="grid grid-cols-4 gap-2">
                       {[...Array(8)].map((_, i) => <div key={i} className="h-10 bg-white/5 rounded-lg animate-pulse" />)}
                     </div>
+                  ) : slots.length === 0 ? (
+                    <div className="rounded-xl border border-white/10 bg-white/[0.03] px-4 py-8 text-center">
+                      <Clock className="mx-auto mb-2 size-5 text-white/35" />
+                      <p className="text-sm font-medium text-white/80">No times available for this date</p>
+                      <p className="mt-1 text-xs text-white/50">Try another day or select a different barber.</p>
+                    </div>
                   ) : (
                     <div className="grid grid-cols-4 gap-2">
                       {slots.map((slot) => (
