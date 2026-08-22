@@ -37,15 +37,20 @@ function slotToIso(date: string, time: string) {
 }
 
 function normalizeBookingPhone(phone: string) {
-  return phone.replace(/[\s-]+/g, "");
+  const digits = phone.replace(/\D/g, "");
+  if (digits.startsWith("233") && digits.length === 12) return `+${digits}`;
+  if (digits.length === 9 && /^[2-9]/.test(digits)) return `0${digits}`;
+  return digits;
+}
+
+function isValidGhanaPhone(phone: string) {
+  return /^(\+233|0)[2-9]\d{8}$/.test(normalizeBookingPhone(phone));
 }
 
 function BookingFlow() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const user = useAuthStore((state) => state.user);
-  const accessToken = useAuthStore((state) => state.accessToken);
-  const isAuthenticated = useAuthStore((state) => state.isAuthenticated);
   const requestedShopId = searchParams.get("shop");
 
   const [step, setStep] = useState(() => requestedShopId ? 1 : 0);
@@ -94,11 +99,8 @@ function BookingFlow() {
         barberId: selected.barber?.id,
         scheduledAt: slotToIso(selected.date ?? "", selected.time ?? ""),
       };
-      // The server treats an expired token as a guest. Always include the best
-      // available contact details so a persisted but expired session can still
-      // create a guest booking instead of failing validation.
-      payload.customerName = guestName.trim() || user?.name?.trim();
-      payload.customerPhone = normalizeBookingPhone(guestPhone || user?.phone || "");
+      payload.customerName = bookingName;
+      payload.customerPhone = bookingPhone;
       return api.post("/api/bookings", payload);
     },
     onSuccess: async (res) => {
@@ -136,9 +138,9 @@ function BookingFlow() {
     },
   });
 
-  // A persisted token can outlive its user payload. Treat that incomplete state
-  // as a guest flow so contact fields remain available for the API fallback.
-  const isGuest = !(isAuthenticated && accessToken && user?.name && user?.phone);
+  const bookingName = guestName.trim() || user?.name?.trim() || "";
+  const bookingPhone = normalizeBookingPhone(guestPhone || user?.phone || "");
+  const contactDetailsValid = bookingName.length >= 2 && isValidGhanaPhone(bookingPhone);
 
   const canProceed = () => {
     if (step === 0) return !!activeShop;
@@ -146,8 +148,7 @@ function BookingFlow() {
     if (step === 2) return !!selected.barber;
     if (step === 3) return !!(selected.date && selected.time);
     if (step === 4) return true;
-    // Confirm step: guests must provide name + phone
-    if (step === 5 && isGuest) return guestName.trim().length >= 2 && guestPhone.trim().length >= 9;
+    if (step === 5) return contactDetailsValid;
     return true;
   };
 
@@ -459,34 +460,37 @@ function BookingFlow() {
               </div>
 
               {/* Guest contact details — only shown when not logged in */}
-              {isGuest && (
-                <div className="bg-[#111] border border-white/10 rounded-2xl p-5 mb-6 space-y-4">
+              <div className="bg-[#111] border border-white/10 rounded-2xl p-5 mb-6 space-y-4">
                   <p className="text-sm font-semibold text-white/70">Your contact details</p>
-                  <p className="text-xs text-white/60">We&apos;ll use this to track your booking. No account needed.</p>
+                  <p className="text-xs text-white/60">We&apos;ll use this to track your booking and send updates.</p>
                   <div>
                     <label className="text-xs text-white/60 block mb-1.5">Full name *</label>
                     <input
                       type="text"
                       value={guestName}
                       onChange={(e) => setGuestName(e.target.value)}
-                      placeholder="Kofi Mensah"
+                      placeholder={user?.name || "Kofi Mensah"}
                       className="w-full bg-[#080808] border border-white/10 rounded-xl px-4 py-3 text-white placeholder-white/20 focus:outline-none focus:border-[#d4a017] transition-colors text-sm"
                     />
                   </div>
                   <div>
                     <label className="text-xs text-white/60 block mb-1.5 flex items-center gap-1.5">
-                      <Phone className="w-3 h-3" /> Phone number *
+                      <Phone className="w-3 h-3" /> Ghana phone number *
                     </label>
                     <input
                       type="tel"
+                      inputMode="numeric"
                       value={guestPhone}
                       onChange={(e) => setGuestPhone(e.target.value)}
-                      placeholder="024 000 0000"
+                      placeholder={user?.phone || "024 000 0000"}
+                      aria-describedby="booking-phone-help"
                       className="w-full bg-[#080808] border border-white/10 rounded-xl px-4 py-3 text-white placeholder-white/20 focus:outline-none focus:border-[#d4a017] transition-colors text-sm"
                     />
+                    <p id="booking-phone-help" className={cn("mt-1.5 text-xs", guestPhone && !isValidGhanaPhone(guestPhone) ? "text-red-300" : "text-white/50")}>
+                      Use 0XX XXX XXXX or +233 XX XXX XXXX.
+                    </p>
                   </div>
-                </div>
-              )}
+              </div>
 
               {selected.service?.depositAmount && (
                 <p className="text-sm text-[#d4a017] text-center mb-4">
