@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { motion, AnimatePresence } from "framer-motion";
-import { Plus, User, Star, Calendar, Trash2, X, ChevronDown, ChevronUp, Eye, EyeOff } from "lucide-react";
+import { Plus, User, Star, Calendar, Trash2, X, ChevronDown, ChevronUp, Eye, EyeOff, Search } from "lucide-react";
 import { toast } from "sonner";
 import api from "@/lib/api";
 import { cn } from "@/lib/utils";
@@ -21,6 +21,8 @@ interface StaffMember {
   staffSchedules: Array<{ dayOfWeek: number; startTime: string; endTime: string; isWorking: boolean }>;
   performance: Array<{ date: string; bookingsCount: number; completedCount: number; totalRevenue: number; avgRating: number | null }>;
 }
+interface ServiceOption { id: string; name: string; durationMinutes: number; price: number; }
+interface ShopSettings { id: string; }
 
 const defaultSchedule = DAYS.map((_, i) => ({
   dayOfWeek: i,
@@ -33,13 +35,25 @@ export default function StaffPage() {
   const qc = useQueryClient();
   const [showAdd, setShowAdd] = useState(false);
   const [expanded, setExpanded] = useState<string | null>(null);
-  const [form, setForm] = useState({ name: "", phone: "", password: "", bio: "", specialties: "", schedule: defaultSchedule });
+  const [form, setForm] = useState({ name: "", phone: "", password: "", bio: "", specialties: [] as string[], schedule: defaultSchedule });
   const [showPw, setShowPw] = useState(false);
+  const [serviceSearch, setServiceSearch] = useState("");
+  const [servicePickerOpen, setServicePickerOpen] = useState(false);
 
   const { data: staff, isLoading } = useQuery<StaffMember[]>({
     queryKey: ["staff"],
     queryFn: () => api.get("/api/staff").then((r) => r.data.data),
   });
+  const { data: shop } = useQuery<ShopSettings>({
+    queryKey: ["shop-settings"],
+    queryFn: () => api.get("/api/shops/settings").then((r) => r.data.data),
+  });
+  const { data: services = [], isLoading: servicesLoading } = useQuery<ServiceOption[]>({
+    queryKey: ["services", shop?.id],
+    queryFn: () => api.get(`/api/services?shopId=${shop!.id}`).then((r) => r.data.data),
+    enabled: Boolean(shop?.id),
+  });
+  const filteredServices = services.filter((service) => service.name.toLowerCase().includes(serviceSearch.toLowerCase()));
 
   const addMutation = useMutation({
     mutationFn: () => api.post("/api/staff", {
@@ -47,14 +61,14 @@ export default function StaffPage() {
       phone: form.phone,
       password: form.password,
       bio: form.bio,
-      specialties: form.specialties.split(",").map((s) => s.trim()).filter(Boolean),
+      specialties: form.specialties,
       schedule: form.schedule,
     }),
     onSuccess: () => {
       toast.success("Staff member added!");
       qc.invalidateQueries({ queryKey: ["staff"] });
       setShowAdd(false);
-      setForm({ name: "", phone: "", password: "", bio: "", specialties: "", schedule: defaultSchedule });
+      setForm({ name: "", phone: "", password: "", bio: "", specialties: [], schedule: defaultSchedule });
     },
     onError: (e: unknown) => toast.error((e as { response?: { data?: { error?: string } } })?.response?.data?.error ?? "Failed to add staff"),
   });
@@ -80,6 +94,12 @@ export default function StaffPage() {
       return { ...f, schedule: s };
     });
   };
+  const toggleService = (name: string) => setForm((current) => ({
+    ...current,
+    specialties: current.specialties.includes(name)
+      ? current.specialties.filter((service) => service !== name)
+      : [...current.specialties, name],
+  }));
 
   return (
     <div className="min-h-screen bg-[#080808] text-white p-4 md:p-8">
@@ -261,10 +281,35 @@ export default function StaffPage() {
                       className="w-full bg-[#080808] border border-white/10 rounded-xl px-4 py-3 focus:outline-none focus:border-[#d4a017] transition-colors resize-none" />
                   </div>
                   <div>
-                    <label className="text-sm text-white/50 block mb-1">Specialties (comma separated)</label>
-                    <input value={form.specialties} onChange={(e) => setForm((f) => ({ ...f, specialties: e.target.value }))}
-                      placeholder="Fade, Braids, Locs"
-                      className="w-full bg-[#080808] border border-white/10 rounded-xl px-4 py-3 focus:outline-none focus:border-[#d4a017] transition-colors" />
+                    <label htmlFor="barber-services" className="text-sm text-white/50 block mb-1">Services</label>
+                    <div className="rounded-xl border border-white/10 bg-[#080808] p-2">
+                      {form.specialties.length > 0 && (
+                        <div className="mb-2 flex flex-wrap gap-1.5">
+                          {form.specialties.map((service) => (
+                            <button key={service} type="button" onClick={() => toggleService(service)} className="inline-flex items-center gap-1 rounded-lg bg-[#d4a017]/15 px-2 py-1 text-xs font-medium text-[#f5c842] hover:bg-[#d4a017]/25">
+                              {service}<X className="size-3" aria-hidden="true" />
+                            </button>
+                          ))}
+                        </div>
+                      )}
+                      <div className="relative">
+                        <Search className="pointer-events-none absolute left-2.5 top-1/2 size-4 -translate-y-1/2 text-white/35" />
+                        <input id="barber-services" value={serviceSearch} onFocus={() => setServicePickerOpen(true)} onChange={(e) => { setServiceSearch(e.target.value); setServicePickerOpen(true); }}
+                          placeholder="Search services…" aria-expanded={servicePickerOpen} aria-controls="barber-service-list"
+                          className="w-full border-0 bg-transparent py-2 pl-8 pr-2 text-sm text-white placeholder:text-white/35 focus:outline-none" />
+                      </div>
+                    </div>
+                    {servicePickerOpen && (
+                      <div id="barber-service-list" className="mt-2 max-h-48 overflow-y-auto rounded-xl border border-white/10 bg-[#111] p-1" role="listbox" aria-label="Available services">
+                        {servicesLoading ? <p className="px-3 py-4 text-sm text-white/50">Loading services…</p> : filteredServices.length ? filteredServices.map((service) => (
+                          <label key={service.id} className="flex cursor-pointer items-center gap-3 rounded-lg px-3 py-2.5 text-sm hover:bg-white/5">
+                            <input type="checkbox" checked={form.specialties.includes(service.name)} onChange={() => toggleService(service.name)} className="accent-[#d4a017]" />
+                            <span className="flex-1">{service.name}</span>
+                            <span className="text-xs text-white/45">{service.durationMinutes} min · GHS {service.price}</span>
+                          </label>
+                        )) : <p className="px-3 py-4 text-sm text-white/50">No matching services.</p>}
+                      </div>
+                    )}
                   </div>
 
                   {/* Schedule */}

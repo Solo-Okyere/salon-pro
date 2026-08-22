@@ -1,13 +1,13 @@
 "use client";
 
-import { useState } from "react";
+import { Suspense, useState } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   Scissors, User, Calendar, Clock, CreditCard, CheckCircle,
   ChevronLeft, ChevronRight, AlertCircle, Phone, Users,
 } from "lucide-react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { toast } from "sonner";
 import api from "@/lib/api";
 import { formatCurrency } from "@/lib/utils";
@@ -23,11 +23,13 @@ interface Slot { time: string; available: boolean }
 
 const fade = { hidden: { opacity: 0, x: 20 }, show: { opacity: 1, x: 0 }, exit: { opacity: 0, x: -20 } };
 
-export default function BookingPage() {
+function BookingFlow() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const user = useAuthStore((s) => s.user);
+  const requestedShopId = searchParams.get("shop");
 
-  const [step, setStep] = useState(0);
+  const [step, setStep] = useState(() => requestedShopId ? 1 : 0);
   const [selected, setSelected] = useState<{
     shop?: Shop; service?: Service; barber?: Barber;
     date?: string; time?: string; provider?: string; phone?: string;
@@ -48,24 +50,27 @@ export default function BookingPage() {
     queryFn: () => api.get("/api/shops").then((r) => r.data.data),
   });
 
-  const { data: shopData } = useQuery({
-    queryKey: ["shop", selected.shop?.slug],
-    queryFn: () => api.get(`/api/shops/${selected.shop?.slug}`).then((r) => r.data.data),
-    enabled: !!selected.shop?.slug,
+  const requestedShop = shops?.find((shop) => shop.id === requestedShopId);
+  const activeShop = selected.shop ?? requestedShop;
+
+  const { data: shopData, isLoading: isShopLoading, isError: isShopError } = useQuery({
+    queryKey: ["shop", activeShop?.slug],
+    queryFn: () => api.get(`/api/shops/${activeShop!.slug}`).then((r) => r.data.data),
+    enabled: !!activeShop?.slug,
   });
 
   const { data: slots } = useQuery<Slot[]>({
-    queryKey: ["slots", selected.shop?.id, selected.barber?.id, selected.date],
+    queryKey: ["slots", activeShop?.id, selected.barber?.id, selected.date],
     queryFn: () => api.get("/api/bookings/available-slots", {
-      params: { shopId: selected.shop?.id, barberId: selected.barber?.id, date: selected.date }
+      params: { shopId: activeShop?.id, barberId: selected.barber?.id, date: selected.date }
     }).then((r) => r.data.data),
-    enabled: !!(selected.shop?.id && selected.barber?.id && selected.date),
+    enabled: !!(activeShop?.id && selected.barber?.id && selected.date),
   });
 
   const bookMutation = useMutation({
     mutationFn: () => {
       const payload: Record<string, unknown> = {
-        shopId: selected.shop?.id,
+        shopId: activeShop?.id,
         serviceId: selected.service?.id,
         barberId: selected.barber?.id,
         scheduledAt: `${selected.date}T${selected.time}`,
@@ -97,7 +102,7 @@ export default function BookingPage() {
 
       setConfirmedBooking({
         id: bookingId,
-        shopName: selected.shop?.name ?? "",
+        shopName: activeShop?.name ?? "",
         serviceName: selected.service?.name ?? "",
         barberName: selected.barber?.user.name ?? "",
         scheduledAt: `${selected.date}T${selected.time}`,
@@ -113,7 +118,7 @@ export default function BookingPage() {
   const isGuest = !user;
 
   const canProceed = () => {
-    if (step === 0) return !!selected.shop;
+    if (step === 0) return !!activeShop;
     if (step === 1) return !!selected.service;
     if (step === 2) return !!selected.barber;
     if (step === 3) return !!(selected.date && selected.time);
@@ -161,7 +166,7 @@ export default function BookingPage() {
 
           <div className="flex flex-col gap-3">
             <button
-              onClick={() => router.push(`/queue?shopId=${selected.shop?.id}`)}
+              onClick={() => router.push(`/queue?shopId=${activeShop?.id}`)}
               className="w-full py-3 bg-[#d4a017] hover:bg-[#b8860b] text-black font-bold rounded-xl transition-colors flex items-center justify-center gap-2"
             >
               <Users className="w-4 h-4" /> View Live Queue
@@ -215,7 +220,7 @@ export default function BookingPage() {
                 {shops?.map((shop) => (
                   <button key={shop.id} onClick={() => setSelected({ shop })}
                     className={cn("w-full text-left bg-[#111] border rounded-xl p-4 transition-all",
-                      selected.shop?.id === shop.id ? "border-[#d4a017] bg-[#d4a017]/5" : "border-white/10 hover:border-white/30")}>
+                      activeShop?.id === shop.id ? "border-[#d4a017] bg-[#d4a017]/5" : "border-white/10 hover:border-white/30")}>
                     <div className="flex items-center gap-3">
                       <div className="w-10 h-10 bg-[#d4a017]/10 rounded-xl flex items-center justify-center">
                         <Scissors className="w-5 h-5 text-[#d4a017]" />
@@ -236,7 +241,23 @@ export default function BookingPage() {
             <motion.div key="service" variants={fade} initial="hidden" animate="show" exit="exit">
               <h2 className="text-lg font-semibold mb-4">Choose a Service</h2>
               <div className="space-y-3">
-                {(shopData?.services ?? []).map((s: Service) => (
+                {isShopLoading ? (
+                  <div className="space-y-3" aria-label="Loading services">
+                    {[0, 1, 2].map((index) => <div key={index} className="h-20 rounded-xl bg-white/5 animate-pulse" />)}
+                  </div>
+                ) : isShopError || !activeShop ? (
+                  <div className="rounded-2xl border border-red-400/20 bg-red-400/5 px-5 py-8 text-center">
+                    <p className="font-medium text-red-200">We couldn&apos;t load this shop&apos;s services.</p>
+                    <button type="button" onClick={() => setStep(0)} className="mt-3 text-sm text-primary hover:underline">Choose another shop</button>
+                  </div>
+                ) : !(shopData?.services?.length) ? (
+                  <div className="rounded-2xl border border-white/10 bg-white/[0.03] px-5 py-10 text-center">
+                    <Scissors className="mx-auto mb-3 size-7 text-white/30" />
+                    <p className="font-medium">No services available yet</p>
+                    <p className="mt-1 text-sm text-white/60">This shop has not added bookable services yet.</p>
+                    <button type="button" onClick={() => setStep(0)} className="mt-4 text-sm text-primary hover:underline">Choose another shop</button>
+                  </div>
+                ) : shopData.services.map((s: Service) => (
                   <button key={s.id} onClick={() => setSelected(prev => ({ ...prev, service: s }))}
                     className={cn("w-full text-left bg-[#111] border rounded-xl p-4 transition-all",
                       selected.service?.id === s.id ? "border-[#d4a017] bg-[#d4a017]/5" : "border-white/10 hover:border-white/30")}>
@@ -470,6 +491,14 @@ export default function BookingPage() {
         )}
       </div>
     </div>
+  );
+}
+
+export default function BookingPage() {
+  return (
+    <Suspense fallback={<div className="min-h-screen bg-[#080808]" />}>
+      <BookingFlow />
+    </Suspense>
   );
 }
 

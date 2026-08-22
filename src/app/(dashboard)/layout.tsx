@@ -46,6 +46,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   const { user, clearAuth } = useAuthStore();
   const [mobileOpen, setMobileOpen] = useState(false);
   const [userMenuOpen, setUserMenuOpen] = useState(false);
+  const [notificationsOpen, setNotificationsOpen] = useState(false);
 
   const role    = user?.role ?? "CUSTOMER";
   const items   = NAV.filter(n => n.roles.includes(role));
@@ -172,7 +173,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
           style={{ background: "radial-gradient(ellipse at top right, rgba(212,160,23,0.07) 0%, transparent 65%)" }} />
         {/* Purple ambient — bottom-left */}
         <div className="absolute bottom-0 left-0 w-[500px] h-[400px] rounded-full pointer-events-none"
-          style={{ background: "radial-gradient(ellipse at bottom left, rgba(99,51,200,0.06) 0%, transparent 65%)" }} />
+          style={{ background: "radial-gradient(ellipse at bottom left, rgba(80,103,138,0.06) 0%, transparent 65%)" }} />
       </div>
 
       {/* Desktop sidebar */}
@@ -232,10 +233,41 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
           </div>
 
           <div className="flex items-center gap-2">
-            <button className="relative p-1.5 rounded-md hover:bg-white/[0.06] transition-colors">
-              <Bell className="w-4 h-4 text-white/50" />
-              <span className="absolute top-1 right-1 w-1.5 h-1.5 rounded-full bg-[#d4a017]" />
-            </button>
+            <div className="relative">
+              <button
+                type="button"
+                onClick={() => setNotificationsOpen(open => !open)}
+                aria-expanded={notificationsOpen}
+                aria-controls="notification-panel"
+                aria-label="Open notifications"
+                className="relative rounded-md p-1.5 transition-colors hover:bg-white/[0.06] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+              >
+                <Bell className="w-4 h-4 text-white/50" />
+                <span className="absolute top-1 right-1 w-1.5 h-1.5 rounded-full bg-[#d4a017]" />
+              </button>
+              <AnimatePresence>
+                {notificationsOpen && (
+                  <motion.section
+                    id="notification-panel"
+                    initial={{ opacity: 0, y: -6, scale: 0.97 }}
+                    animate={{ opacity: 1, y: 0, scale: 1 }}
+                    exit={{ opacity: 0, y: -6, scale: 0.97 }}
+                    transition={{ duration: 0.16 }}
+                    className="absolute right-0 top-full z-50 mt-2 w-80 rounded-xl border border-white/10 bg-[#11111e] p-4 shadow-dropdown"
+                  >
+                    <div className="flex items-center justify-between">
+                      <h2 className="text-sm font-semibold text-white">Notifications</h2>
+                      <span className="text-xs text-white/45">All caught up</span>
+                    </div>
+                    <div className="mt-4 rounded-lg border border-white/[0.06] bg-white/[0.03] px-4 py-6 text-center">
+                      <Bell className="mx-auto size-5 text-white/35" />
+                      <p className="mt-2 text-sm font-medium text-white/80">No new notifications</p>
+                      <p className="mt-1 text-xs leading-5 text-white/50">Booking and shop updates will appear here.</p>
+                    </div>
+                  </motion.section>
+                )}
+              </AnimatePresence>
+            </div>
 
             <div className="relative">
               <button
@@ -283,7 +315,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
         </header>
 
         {/* Content */}
-        <main className="flex-1 p-6">
+        <main className="flex-1 p-4 sm:p-6">
           {children}
         </main>
       </div>

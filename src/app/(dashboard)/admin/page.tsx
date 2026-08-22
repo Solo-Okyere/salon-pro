@@ -52,6 +52,7 @@ function RegisterModal({ onClose }: { onClose: () => void }) {
   });
   const [step, setStep] = useState<1 | 2>(1);
   const [showPw, setShowPw] = useState(false);
+  const [showCreatedPassword, setShowCreatedPassword] = useState(false);
 
   const [createdSlug, setCreatedSlug] = useState<string | null>(null);
   const [createdOwner, setCreatedOwner] = useState<{ phone: string; name: string } | null>(null);
@@ -72,10 +73,18 @@ function RegisterModal({ onClose }: { onClose: () => void }) {
     (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) =>
       setForm(p => ({ ...p, [k]: e.target.value }));
 
+  const copy = (value: string, label: string) => {
+    navigator.clipboard.writeText(value);
+    toast.success(`${label} copied`);
+  };
+  const isSuccess = Boolean(createdSlug && createdOwner);
+  const ownerPhone = createdOwner ? `+233${createdOwner.phone.replace(/^(\+233|0)/, "")}` : "";
+  const shopUrl = typeof window !== "undefined" && createdSlug ? `${window.location.origin}/shops/${createdSlug}` : "";
+
   return (
     <motion.div
       initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-      className="fixed inset-0 z-50 bg-black/40 flex items-center justify-center p-4"
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4 backdrop-blur-sm"
       onClick={e => e.target === e.currentTarget && onClose()}
     >
       <motion.div
@@ -83,23 +92,23 @@ function RegisterModal({ onClose }: { onClose: () => void }) {
         animate={{ opacity: 1, scale: 1, y: 0 }}
         exit={{ opacity: 0, scale: 0.96 }}
         transition={{ duration: 0.18 }}
-        className="relative glass rounded-2xl shadow-dropdown w-full max-w-lg overflow-hidden"
+        className="relative w-full max-w-lg overflow-hidden rounded-2xl border border-white/15 bg-[#11111e]/95 shadow-dropdown"
       >
-        <div className="flex items-center justify-between px-6 py-4 border-b border-border">
+        {!isSuccess && <><div className="flex items-center justify-between px-6 py-4 border-b border-border">
           <div>
             <h2 className="font-semibold text-foreground">Register new shop</h2>
             <p className="text-xs text-muted-foreground mt-0.5">Step {step} of 2</p>
           </div>
-          <button onClick={onClose} className="p-1.5 rounded-lg hover:bg-secondary transition-colors">
+          <button type="button" aria-label="Close registration" onClick={onClose} className="p-1.5 rounded-lg hover:bg-secondary transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary">
             <X className="w-4 h-4 text-muted-foreground" />
           </button>
         </div>
 
         <div className="h-1 bg-secondary">
           <motion.div className="h-full bg-primary" animate={{ width: step === 1 ? "50%" : "100%" }} transition={{ duration: 0.3 }} />
-        </div>
+        </div></>}
 
-        <form
+        {!isSuccess && <form
           onSubmit={e => { e.preventDefault(); if (step === 1) { setStep(2); return; } create.mutate(form); }}
           className="p-6 space-y-4"
         >
@@ -183,46 +192,28 @@ function RegisterModal({ onClose }: { onClose: () => void }) {
               {create.isPending ? "Registering…" : step === 1 ? "Next →" : "Register shop"}
             </button>
           </div>
-        </form>
+        </form>}
 
         {/* Success state — show shop URL + owner credentials */}
         <AnimatePresence>
           {createdSlug && createdOwner && (
-            <motion.div
+            <motion.section
               initial={{ opacity: 0, y: 8 }}
               animate={{ opacity: 1, y: 0 }}
-              className="absolute inset-0 glass rounded-2xl flex flex-col items-center justify-center p-8 text-center overflow-y-auto"
+              className="max-h-[min(44rem,calc(100vh-2rem))] overflow-y-auto p-6 text-center sm:p-8"
             >
               <div className="w-14 h-14 rounded-2xl flex items-center justify-center mb-4"
                 style={{ background: "rgba(52,211,153,0.12)", border: "1px solid rgba(52,211,153,0.2)" }}>
                 <CheckCircle className="w-7 h-7 text-emerald-400" />
               </div>
-              <h3 className="font-bold text-foreground text-lg mb-1">Shop registered!</h3>
-              <p className="text-sm text-muted-foreground mb-4">Share these login details with {createdOwner.name}:</p>
+              <h2 className="font-bold text-foreground text-xl tracking-tight mb-1">Shop registered</h2>
+              <p className="text-sm leading-6 text-muted-foreground mb-6">Share these login details securely with {createdOwner.name}.</p>
 
               {/* Owner login credentials */}
-              <div className="w-full bg-secondary rounded-xl px-4 py-3 mb-3 text-left space-y-2">
-                <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Owner login</p>
-                <div className="flex items-center justify-between">
-                  <span className="text-xs text-muted-foreground">Phone</span>
-                  <span className="text-sm font-mono text-foreground">+233{createdOwner.phone.replace(/^(\+233|0)/, "")}</span>
-                </div>
-                <div className="flex items-center justify-between">
-                  <span className="text-xs text-muted-foreground">Password</span>
-                  <div className="flex items-center gap-2">
-                    <span className="text-sm font-mono text-foreground">{form.ownerPassword}</span>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        navigator.clipboard.writeText(form.ownerPassword);
-                        toast.success("Password copied!");
-                      }}
-                      className="p-1 rounded hover:bg-border transition-colors"
-                    >
-                      <Copy className="w-3.5 h-3.5 text-muted-foreground" />
-                    </button>
-                  </div>
-                </div>
+              <div className="w-full rounded-xl border border-border bg-secondary/70 px-4 py-3 mb-4 text-left">
+                <p className="mb-2 text-xs font-semibold text-muted-foreground">SHOP & OWNER CREDENTIALS</p>
+                {[["Shop", form.shopName], ["City", form.city], ["Region", form.region], ["Phone", ownerPhone]].map(([label, value]) => <div key={label} className="flex min-w-0 items-center gap-2 border-t border-border py-2 first:border-t-0 first:pt-0"><span className="w-16 shrink-0 text-xs text-muted-foreground">{label}</span><span className="min-w-0 flex-1 truncate text-right font-mono text-sm text-foreground">{value}</span><button type="button" onClick={() => copy(value, label)} aria-label={`Copy ${label.toLowerCase()}`} className="shrink-0 rounded-lg p-1.5 text-muted-foreground hover:bg-white/10 hover:text-foreground"><Copy className="size-3.5" /></button></div>)}
+                <div className="flex min-w-0 items-center gap-2 border-t border-border pt-2"><span className="w-16 shrink-0 text-xs text-muted-foreground">Password</span><span className="min-w-0 flex-1 truncate text-right font-mono text-sm text-foreground">{showCreatedPassword ? form.ownerPassword : "••••••••"}</span><button type="button" onClick={() => setShowCreatedPassword(v => !v)} aria-label={showCreatedPassword ? "Hide password" : "Show password"} className="shrink-0 rounded-lg p-1.5 text-muted-foreground hover:bg-white/10 hover:text-foreground">{showCreatedPassword ? <EyeOff className="size-3.5" /> : <Eye className="size-3.5" />}</button><button type="button" onClick={() => copy(form.ownerPassword, "Password")} aria-label="Copy password" className="shrink-0 rounded-lg p-1.5 text-muted-foreground hover:bg-white/10 hover:text-foreground"><Copy className="size-3.5" /></button></div>
               </div>
 
               {/* Open owner login button */}
@@ -230,33 +221,27 @@ function RegisterModal({ onClose }: { onClose: () => void }) {
                 href="/login"
                 target="_blank"
                 rel="noopener noreferrer"
-                className="w-full flex items-center justify-center gap-2 py-2.5 rounded-xl mb-3 text-sm font-semibold transition-all hover:opacity-90"
-                style={{ background: "linear-gradient(135deg, #d4a017, #f5c842)", color: "#000" }}
+                className="btn-outline w-full flex items-center justify-center gap-2 py-2.5 rounded-xl mb-4 text-sm font-semibold"
               >
                 Open owner login <ArrowRight className="w-4 h-4" />
               </a>
 
               {/* Shop URL */}
-              <div className="w-full bg-secondary rounded-xl px-4 py-3 flex items-center gap-2 mb-5">
+              <div className="w-full rounded-xl border border-border bg-secondary/70 px-3 py-2.5 flex min-w-0 items-center gap-2 mb-6">
                 <Link2 className="w-4 h-4 text-muted-foreground shrink-0" />
-                <span className="text-sm font-mono text-foreground flex-1 break-all">
-                  {typeof window !== "undefined" ? window.location.origin : ""}/shops/{createdSlug}
-                </span>
+                <span className="min-w-0 flex-1 truncate text-left text-xs font-mono text-foreground sm:text-sm" title={shopUrl}>{shopUrl}</span>
                 <button
-                  onClick={() => {
-                    navigator.clipboard.writeText(`${window.location.origin}/shops/${createdSlug}`);
-                    toast.success("Link copied!");
-                  }}
-                  className="shrink-0 p-1 rounded hover:bg-border transition-colors"
+                  type="button" onClick={() => copy(shopUrl, "Link")} aria-label="Copy shareable link"
+                  className="shrink-0 rounded-lg p-1.5 text-muted-foreground hover:bg-white/10 hover:text-foreground"
                 >
                   <Copy className="w-4 h-4 text-muted-foreground" />
                 </button>
               </div>
 
-              <button onClick={onClose} className="btn-primary px-6 py-2.5 rounded-lg text-sm font-semibold">
+              <button type="button" onClick={onClose} className="btn-primary w-full px-6 py-3 rounded-xl text-sm font-semibold">
                 Done
               </button>
-            </motion.div>
+            </motion.section>
           )}
         </AnimatePresence>
       </motion.div>

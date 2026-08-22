@@ -46,11 +46,22 @@ html {
 }
 
 body {
-  background: #080810;
+  background:
+    radial-gradient(900px 500px at 95% -10%, rgba(212,160,23,0.10), transparent 60%),
+    radial-gradient(720px 460px at -10% 105%, rgba(65,76,125,0.12), transparent 60%),
+    #080810;
   color: #f0f0f8;
   overflow-x: hidden;
   min-height: 100%;
+  font-feature-settings: "ss01", "cv02";
 }
+
+:focus-visible {
+  outline: 2px solid #f5c842;
+  outline-offset: 3px;
+}
+
+button, a, input, select, textarea { -webkit-tap-highlight-color: transparent; }
 
 /* ── Scrollbar ────────────────────────────────────────────────────────────── */
 ::-webkit-scrollbar         { width: 5px; height: 5px; }
@@ -95,6 +106,15 @@ body {
     0 4px 12px rgba(0,0,0,0.3),
     0 0 0 1px rgba(212,160,23,0.1),
     inset 0 1px 0 rgba(255,255,255,0.1);
+}
+
+/* Reusable surface used by public and dashboard pages that previously used
+   slightly different raw dark-panel values. */
+.surface-panel {
+  background: rgba(17,17,30,0.78);
+  border: 1px solid rgba(255,255,255,0.1);
+  border-radius: 1rem;
+  box-shadow: 0 10px 30px rgba(0,0,0,0.28), inset 0 1px 0 rgba(255,255,255,0.05);
 }
 
 /* Stronger glass for sidebars / top bars */
@@ -173,6 +193,10 @@ body {
   box-shadow: 0 6px 20px rgba(212,160,23,0.5);
 }
 .btn-primary:active { transform: scale(0.98); }
+.btn-primary:focus-visible, .btn-outline:focus-visible, .btn-gold:focus-visible {
+  outline: 2px solid #f5c842;
+  outline-offset: 3px;
+}
 
 /* ── Outlined button (glass variant) ─────────────────────────────────────── */
 .btn-outline {
@@ -202,6 +226,29 @@ body {
 .input-base:focus {
   border-color: rgba(212,160,23,0.55);
   box-shadow: 0 0 0 3px rgba(212,160,23,0.12);
+}
+
+/* Give handwritten page-level form controls the same interaction language. */
+input:not([type="checkbox"]):not([type="radio"]), textarea, select {
+  transition: border-color 0.15s ease, box-shadow 0.15s ease, background-color 0.15s ease;
+}
+input:not([type="checkbox"]):not([type="radio"]):focus, textarea:focus, select:focus {
+  border-color: rgba(212,160,23,0.65) !important;
+  box-shadow: 0 0 0 3px rgba(212,160,23,0.14);
+  outline: none;
+}
+
+@media (max-width: 640px) {
+  .page-header { padding-inline: 1rem; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    scroll-behavior: auto !important;
+    transition-duration: 0.01ms !important;
+  }
 }
 
 /* ── Accessible dropdown/select styling ─────────────────────────────────── */
