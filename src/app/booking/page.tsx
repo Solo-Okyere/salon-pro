@@ -36,6 +36,10 @@ function slotToIso(date: string, time: string) {
   return scheduledAt.toISOString();
 }
 
+function normalizeBookingPhone(phone: string) {
+  return phone.replace(/[\s-]+/g, "");
+}
+
 function BookingFlow() {
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -90,11 +94,11 @@ function BookingFlow() {
         barberId: selected.barber?.id,
         scheduledAt: slotToIso(selected.date ?? "", selected.time ?? ""),
       };
-      // Include guest details when not logged in
-      if (isGuest) {
-        payload.customerName = guestName;
-        payload.customerPhone = guestPhone.replace(/\s+/g, "");
-      }
+      // The server treats an expired token as a guest. Always include the best
+      // available contact details so a persisted but expired session can still
+      // create a guest booking instead of failing validation.
+      payload.customerName = guestName.trim() || user?.name?.trim();
+      payload.customerPhone = normalizeBookingPhone(guestPhone || user?.phone || "");
       return api.post("/api/bookings", payload);
     },
     onSuccess: async (res) => {
