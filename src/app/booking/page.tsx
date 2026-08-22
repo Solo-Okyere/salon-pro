@@ -136,7 +136,9 @@ function BookingFlow() {
     },
   });
 
-  const isGuest = !(isAuthenticated && accessToken);
+  // A persisted token can outlive its user payload. Treat that incomplete state
+  // as a guest flow so contact fields remain available for the API fallback.
+  const isGuest = !(isAuthenticated && accessToken && user?.name && user?.phone);
 
   const canProceed = () => {
     if (step === 0) return !!activeShop;
