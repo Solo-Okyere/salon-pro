@@ -26,7 +26,11 @@ const fade = { hidden: { opacity: 0, x: 20 }, show: { opacity: 1, x: 0 }, exit: 
 function BookingFlow() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const user = useAuthStore((s) => s.user);
+  const { user, accessToken, isAuthenticated } = useAuthStore((s) => ({
+    user: s.user,
+    accessToken: s.accessToken,
+    isAuthenticated: s.isAuthenticated,
+  }));
   const requestedShopId = searchParams.get("shop");
 
   const [step, setStep] = useState(() => requestedShopId ? 1 : 0);
@@ -73,12 +77,12 @@ function BookingFlow() {
         shopId: activeShop?.id,
         serviceId: selected.service?.id,
         barberId: selected.barber?.id,
-        scheduledAt: `${selected.date}T${selected.time}`,
+        scheduledAt: new Date(`${selected.date}T${selected.time}:00`).toISOString(),
       };
       // Include guest details when not logged in
-      if (!user) {
+      if (isGuest) {
         payload.customerName = guestName;
-        payload.customerPhone = guestPhone;
+        payload.customerPhone = guestPhone.replace(/\s+/g, "");
       }
       return api.post("/api/bookings", payload);
     },
@@ -109,13 +113,15 @@ function BookingFlow() {
       });
     },
     onError: (err: unknown) => {
-      const msg = (err as { response?: { data?: { message?: string } } })?.response?.data?.message
+      const response = (err as { response?: { data?: { message?: string; errors?: Record<string, string[] | undefined> } } })?.response?.data;
+      const validationError = response?.errors ? Object.values(response.errors).flat().find(Boolean) : undefined;
+      const msg = validationError ?? response?.message
         ?? "Booking failed. Please try again.";
       toast.error(msg);
     },
   });
 
-  const isGuest = !user;
+  const isGuest = !(isAuthenticated && accessToken);
 
   const canProceed = () => {
     if (step === 0) return !!activeShop;
