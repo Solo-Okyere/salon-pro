@@ -1,45 +1,9 @@
-import { NextRequest, NextResponse } from "next/server";
-import { subscribe, unsubscribe } from "@/lib/realtime";
+import { NextResponse } from "next/server";
 
-export const dynamic = "force-dynamic";
-
-export async function GET(
-  req: NextRequest,
-  { params }: { params: Promise<{ shopId: string }> }
-) {
-  const { shopId } = await params;
-
-  const stream = new ReadableStream({
-    start(ctrl) {
-      subscribe(shopId, ctrl);
-
-      // Send initial connected comment
-      ctrl.enqueue(new TextEncoder().encode(": connected\n\n"));
-
-      // Heartbeat every 25s to prevent proxy / browser timeouts
-      const hb = setInterval(() => {
-        try {
-          ctrl.enqueue(new TextEncoder().encode(": heartbeat\n\n"));
-        } catch {
-          clearInterval(hb);
-        }
-      }, 25_000);
-
-      // Clean up when client disconnects
-      req.signal.addEventListener("abort", () => {
-        clearInterval(hb);
-        unsubscribe(shopId, ctrl);
-        try { ctrl.close(); } catch { /* already closed */ }
-      });
-    },
-  });
-
-  return new NextResponse(stream, {
-    headers: {
-      "Content-Type": "text/event-stream",
-      "Cache-Control": "no-cache, no-transform",
-      Connection: "keep-alive",
-      "X-Accel-Buffering": "no", // prevent nginx buffering
-    },
-  });
+/** SSE is disabled on Vercel serverless; clients should poll queue status. */
+export async function GET() {
+  return NextResponse.json(
+    { success: false, message: "Live streams are not supported; poll /api/queue/status/:shopId instead." },
+    { status: 410, headers: { "Cache-Control": "no-store" } }
+  );
 }

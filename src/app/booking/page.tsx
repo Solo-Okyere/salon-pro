@@ -67,7 +67,11 @@ function BookingFlow() {
   const [confirmedBooking, setConfirmedBooking] = useState<{
     id: string; shopName: string; serviceName: string;
     barberName: string; scheduledAt: string;
+    depositAmount: number;
   } | null>(null);
+  const [paymentPhone, setPaymentPhone] = useState("");
+  const [paymentProvider, setPaymentProvider] = useState<"MTN_MOMO" | "TELECEL_CASH" | "AT_MONEY">("MTN_MOMO");
+  const [paymentReference, setPaymentReference] = useState<string | null>(null);
 
   const { data: shops } = useQuery<Shop[]>({
     queryKey: ["shops"],
@@ -103,30 +107,17 @@ function BookingFlow() {
       payload.customerPhone = bookingPhone;
       return api.post("/api/bookings", payload);
     },
-    onSuccess: async (res) => {
+    onSuccess: (res) => {
       const booking = res.data.data;
       const bookingId = booking.id;
-
-      // Initiate deposit payment if required
-      if (selected.service?.depositAmount && selected.provider && selected.phone) {
-        try {
-          await api.post("/api/payments/initiate", {
-            bookingId,
-            amount: selected.service.depositAmount,
-            provider: selected.provider,
-            phoneNumber: selected.phone,
-          });
-        } catch {
-          toast.error("Booking saved but payment initiation failed.");
-        }
-      }
 
       setConfirmedBooking({
         id: bookingId,
         shopName: activeShop?.name ?? "",
         serviceName: selected.service?.name ?? "",
         barberName: selected.barber?.user.name ?? "",
-        scheduledAt: `${selected.date}T${selected.time}`,
+        scheduledAt: slotToIso(selected.date ?? "", selected.time ?? ""),
+        depositAmount: selected.service?.depositAmount ?? 0,
       });
     },
     onError: (err: unknown) => {
@@ -134,8 +125,34 @@ function BookingFlow() {
       const validationError = response?.errors ? Object.values(response.errors).flat().find(Boolean) : undefined;
       const msg = validationError ?? response?.message
         ?? "Booking failed. Please try again.";
-      toast.error(msg);
+      console.error("[booking] create failed", err, response);
+      toast.error(msg, { duration: 10000 });
     },
+  });
+
+  const paymentMutation = useMutation({
+    mutationFn: () => api.post("/api/payments/initiate", {
+      bookingId: confirmedBooking?.id,
+      amount: confirmedBooking?.depositAmount,
+      provider: paymentProvider,
+      phoneNumber: normalizeBookingPhone(paymentPhone || bookingPhone),
+    }),
+    onSuccess: (res) => {
+      setPaymentReference(res.data.data.reference);
+      toast.success("Payment request sent. Approve it on your phone.", { duration: 10000 });
+    },
+    onError: (err: unknown) => {
+      const response = (err as { response?: { data?: { message?: string } } })?.response?.data;
+      console.error("[booking] payment initiation failed", err, response);
+      toast.error(response?.message ?? "Payment initiation failed. Your booking is saved.", { duration: 10000 });
+    },
+  });
+
+  const paymentStatusQuery = useQuery<{ data: { status: string } }>({
+    queryKey: ["booking-payment-status", paymentReference],
+    queryFn: () => api.get(`/api/payments/${paymentReference}/status`).then((response) => response.data),
+    enabled: !!paymentReference,
+    refetchInterval: (query) => query.state.data?.data.status === "PAID" ? false : 5000,
   });
 
   const bookingName = guestName.trim() || user?.name?.trim() || "";
@@ -199,15 +216,37 @@ function BookingFlow() {
               onClick={() => {
                 setConfirmedBooking(null);
                 setStep(0);
-                setSelected({});
-                setGuestName("");
-                setGuestPhone("");
+            setSelected({});
+            setGuestName("");
+            setGuestPhone("");
+            setPaymentPhone("");
+            setPaymentReference(null);
               }}
               className="w-full py-3 bg-white/5 hover:bg-white/10 text-white font-semibold rounded-xl transition-colors"
             >
               Book Another
             </button>
           </div>
+
+          {confirmedBooking.depositAmount > 0 && (
+            <div className="text-left rounded-2xl border border-[#d4a017]/30 bg-[#d4a017]/10 p-4 mb-6">
+              <p className="font-semibold text-[#f5c842]">Initial deposit: {formatCurrency(confirmedBooking.depositAmount)}</p>
+              <p className="text-sm text-white/60 mt-1">Pay now to confirm your appointment. A request will be sent to your mobile-money number.</p>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mt-4">
+                <select value={paymentProvider} onChange={(event) => setPaymentProvider(event.target.value as typeof paymentProvider)} className="bg-[#080808] border border-white/10 rounded-xl px-3 py-3 text-sm">
+                  <option value="MTN_MOMO">MTN MoMo</option>
+                  <option value="TELECEL_CASH">Telecel Cash</option>
+                  <option value="AT_MONEY">AT Money</option>
+                </select>
+                <input type="tel" inputMode="numeric" value={paymentPhone} onChange={(event) => setPaymentPhone(event.target.value)} placeholder={bookingPhone || "024 000 0000"} className="bg-[#080808] border border-white/10 rounded-xl px-3 py-3 text-sm" />
+              </div>
+              <button onClick={() => paymentMutation.mutate()} disabled={paymentMutation.isPending || !!paymentReference} className="w-full mt-3 py-3 bg-[#d4a017] hover:bg-[#b8860b] disabled:opacity-50 text-black font-bold rounded-xl">
+                {paymentMutation.isPending ? "Sending request…" : paymentReference ? "Payment request sent" : "Pay deposit"}
+              </button>
+              {paymentReference && <p className="text-xs text-green-300 mt-2">Reference: {paymentReference}. Approve the request on your phone.</p>}
+              {paymentStatusQuery.data?.data.status === "PAID" && <p className="text-xs text-green-300 mt-1">Deposit received — your appointment is confirmed.</p>}
+            </div>
+          )}
         </motion.div>
       </div>
     );

@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import type { Viewport } from "next";
 import { Providers } from "./providers";
 import "./globals.css";
 
@@ -10,11 +11,18 @@ export const metadata: Metadata = {
   description:
     "AI-powered barber shop operating system for Ghana. Virtual queues, mobile money payments, WhatsApp automation, and real-time analytics.",
   keywords: ["barber shop", "ghana", "booking", "queue", "mobile money", "AI"],
+  manifest: "/manifest.json",
+  icons: { icon: "/favicon.ico" },
   openGraph: {
     title: "SalonPro",
     description: "AI-powered barber shop OS for Ghana",
     type: "website",
   },
+};
+
+export const viewport: Viewport = {
+  themeColor: "#d4a017",
+  colorScheme: "dark",
 };
 
 export default function RootLayout({

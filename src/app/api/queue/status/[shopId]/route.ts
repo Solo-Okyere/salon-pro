@@ -65,5 +65,3 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ sho
     },
   });
 }
-
-// Real-time updates now use /api/queue/events/[shopId] (GET, SSE + pub/sub)

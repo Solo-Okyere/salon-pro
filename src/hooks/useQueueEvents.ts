@@ -10,15 +10,13 @@ export interface QueueEvent {
 interface Options {
   onJoin?: (event: QueueEvent) => void;
   onUpdate?: (event: QueueEvent) => void;
-  enabled?: boolean; // pass false to skip (e.g. while shopId is not yet known)
+  enabled?: boolean;
+  intervalMs?: number;
 }
 
-/**
- * Opens an EventSource to /api/queue/events/{shopId}.
- * Auto-reconnects on error. Closes on unmount or when shopId changes.
- */
+/** Polls queue status; serverless functions cannot hold SSE connections open. */
 export function useQueueEvents(shopId: string | null | undefined, options: Options = {}) {
-  const { onJoin, onUpdate, enabled = true } = options;
+  const { onJoin, onUpdate, enabled = true, intervalMs = 5000 } = options;
   const onJoinRef = useRef(onJoin);
   const onUpdateRef = useRef(onUpdate);
   onJoinRef.current = onJoin;
@@ -27,40 +25,42 @@ export function useQueueEvents(shopId: string | null | undefined, options: Optio
   useEffect(() => {
     if (!shopId || !enabled) return;
 
-    let es: EventSource | null = null;
-    let retryTimeout: ReturnType<typeof setTimeout> | null = null;
     let alive = true;
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const previousEntries = new Map<string, string>();
 
-    function connect() {
-      if (!alive) return;
-      es = new EventSource(`/api/queue/events/${shopId}`);
+    const poll = async () => {
+      try {
+        const response = await fetch(`/api/queue/status/${shopId}`, { cache: "no-store" });
+        if (!response.ok) throw new Error(`Queue status request failed (${response.status})`);
+        const payload = (await response.json()) as { data?: { entries?: Array<Record<string, unknown>> } };
+        const entries = payload.data?.entries ?? [];
 
-      es.onmessage = (e) => {
-        try {
-          const evt: QueueEvent = JSON.parse(e.data);
-          if (evt.type === "queue:join") onJoinRef.current?.(evt);
-          if (evt.type === "queue:update") onUpdateRef.current?.(evt);
-        } catch {
-          // malformed message — ignore
+        for (const entry of entries) {
+          const entryId = typeof entry.id === "string" ? entry.id : null;
+          if (!entryId) continue;
+          const signature = JSON.stringify(entry);
+          const previous = previousEntries.get(entryId);
+          if (!previous) onJoinRef.current?.({ type: "queue:join", entry });
+          else if (previous !== signature) onUpdateRef.current?.({ type: "queue:update", entry });
+          previousEntries.set(entryId, signature);
         }
-      };
 
-      es.onerror = () => {
-        es?.close();
-        es = null;
-        if (alive) {
-          // Back-off 3s then reconnect
-          retryTimeout = setTimeout(connect, 3000);
+        const activeIds = new Set(entries.map((entry) => entry.id).filter((id): id is string => typeof id === "string"));
+        for (const entryId of previousEntries.keys()) {
+          if (!activeIds.has(entryId)) previousEntries.delete(entryId);
         }
-      };
-    }
+      } catch {
+        // The dashboard query remains the slower fallback when a poll fails.
+      } finally {
+        if (alive) timer = setTimeout(poll, intervalMs);
+      }
+    };
 
-    connect();
-
+    void poll();
     return () => {
       alive = false;
-      if (retryTimeout) clearTimeout(retryTimeout);
-      es?.close();
+      if (timer) clearTimeout(timer);
     };
-  }, [shopId, enabled]);
+  }, [shopId, enabled, intervalMs]);
 }

@@ -148,28 +148,26 @@ export async function POST(req: NextRequest) {
       },
     });
 
-    // No deposit required — booking is confirmed immediately, so notify now
-    if (booking.status === "CONFIRMED") {
-      await sendAndLogNotification({
-        userId: booking.customerId,
-        shopId: booking.shopId,
-        bookingId: booking.id,
-        channel: "SMS",
-        type: "BOOKING_CONFIRMATION",
-        title: "Booking confirmed",
-        body: `Booking confirmed at ${booking.shop.name} on ${booking.scheduledAt.toISOString()}`,
-        templateFn: () =>
-          sms.bookingConfirmation(
-            booking.customer.phone,
-            booking.customer.name,
-            booking.shop.name,
-            format(booking.scheduledAt, "dd MMM yyyy"),
+    await sendAndLogNotification({
+      userId: booking.customerId,
+      shopId: booking.shopId,
+      bookingId: booking.id,
+      channel: "SMS",
+      type: "BOOKING_CONFIRMATION",
+      title: booking.status === "CONFIRMED" ? "Booking confirmed" : "Booking pending deposit",
+      body: `Booking ${booking.status === "CONFIRMED" ? "confirmed" : "created and awaiting deposit"} at ${booking.shop.name} on ${booking.scheduledAt.toISOString()}`,
+      templateFn: () =>
+        sms.bookingConfirmation(
+          booking.customer.phone,
+          booking.customer.name,
+          booking.shop.name,
+          format(booking.scheduledAt, "dd MMM yyyy"),
             format(booking.scheduledAt, "h:mm a"),
             booking.barber.user.name,
-            booking.id
+            booking.id,
+            booking.status !== "CONFIRMED"
           ),
-      });
-    }
+    });
 
     return NextResponse.json({ success: true, data: booking }, { status: 201 });
   } catch (err) {

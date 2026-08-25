@@ -1,10 +1,10 @@
 import { moolre } from "./moolre";
 
 export const sms = {
-  bookingConfirmation: (phone: string, customerName: string, shopName: string, date: string, time: string, barberName: string, ref: string) =>
+  bookingConfirmation: (phone: string, customerName: string, shopName: string, date: string, time: string, barberName: string, ref: string, pendingDeposit = false) =>
     moolre.sendSms(
       phone,
-      `Hi ${customerName}, your appointment at ${shopName} is confirmed for ${date} at ${time} with ${barberName}. - SalonPro`,
+      `Hi ${customerName}, your appointment at ${shopName} is ${pendingDeposit ? "reserved and awaiting your deposit" : "confirmed"} for ${date} at ${time} with ${barberName}. - SalonPro`,
       ref
     ),
 

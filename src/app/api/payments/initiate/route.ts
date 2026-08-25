@@ -8,7 +8,6 @@ import { z } from "zod";
 export async function POST(req: NextRequest) {
   const token = req.headers.get("authorization")?.replace("Bearer ", "");
   const user = await getUserFromToken(token ?? "");
-  if (!user) return NextResponse.json({ success: false, message: "Unauthorized" }, { status: 401 });
 
   try {
     const body = await req.json();
@@ -16,25 +15,33 @@ export async function POST(req: NextRequest) {
 
     // Resolve shopId from booking to avoid trusting client input
     let shopId: string | null = null;
+    let customerId = user?.id ?? null;
     if (data.bookingId) {
       const booking = await prisma.booking.findUnique({
         where: { id: data.bookingId },
-        select: { shopId: true, customerId: true },
+        select: { shopId: true, customerId: true, depositAmount: true },
       });
       if (!booking) {
         return NextResponse.json({ success: false, message: "Booking not found" }, { status: 404 });
       }
-      if (booking.customerId !== user.id) {
+      if (user && booking.customerId !== user.id) {
         return NextResponse.json({ success: false, message: "Forbidden" }, { status: 403 });
       }
+      if (data.amount !== booking.depositAmount) {
+        return NextResponse.json({ success: false, message: "Payment amount does not match the booking deposit" }, { status: 400 });
+      }
       shopId = booking.shopId;
+      customerId = booking.customerId;
+    }
+    if (!customerId) {
+      return NextResponse.json({ success: false, message: "Unauthorized" }, { status: 401 });
     }
 
     const reference = `SP-${Date.now()}-${Math.random().toString(36).slice(2, 8).toUpperCase()}`;
 
     const payment = await prisma.payment.create({
       data: {
-        customerId: user.id,
+        customerId,
         shopId: shopId ?? "",
         bookingId: data.bookingId,
         amount: data.amount,
