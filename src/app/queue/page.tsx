@@ -165,6 +165,7 @@ function QueueBoard() {
 
   // New-entry highlight
   const [newEntryId, setNewEntryId] = useState<string | null>(null);
+  const [queuePollingStopped, setQueuePollingStopped] = useState(false);
 
   // Restore guest customerId from localStorage on mount
   useEffect(() => {
@@ -210,7 +211,12 @@ function QueueBoard() {
 
   const handleUpdate = useCallback(() => { fetchStatus(); }, [fetchStatus]);
 
-  useQueueEvents(shopId || null, { onJoin: handleJoin, onUpdate: handleUpdate, enabled: !!shopId });
+  useQueueEvents(shopId || null, {
+    onJoin: handleJoin,
+    onUpdate: handleUpdate,
+    onStopped: () => setQueuePollingStopped(true),
+    enabled: !!shopId,
+  });
 
   // ── Join queue ────────────────────────────────────────────────────────────
   async function joinQueue(isPremium = false) {
@@ -280,6 +286,7 @@ function QueueBoard() {
             <p className="text-white/60 text-sm flex items-center gap-1.5">
               <span className="inline-block w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse" />
               Live Queue
+              {queuePollingStopped && <span className="text-[10px] font-normal text-yellow-200 border border-yellow-500/30 px-1.5 py-0.5 rounded-full">UPDATES PAUSED</span>}
             </p>
           </div>
           <div className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-primary/10 text-primary text-sm font-semibold">

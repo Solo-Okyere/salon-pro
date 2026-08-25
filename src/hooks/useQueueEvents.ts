@@ -10,17 +10,21 @@ export interface QueueEvent {
 interface Options {
   onJoin?: (event: QueueEvent) => void;
   onUpdate?: (event: QueueEvent) => void;
+  onStopped?: (reason: "gone" | "unavailable") => void;
   enabled?: boolean;
   intervalMs?: number;
+  maxFailures?: number;
 }
 
 /** Polls queue status; serverless functions cannot hold SSE connections open. */
 export function useQueueEvents(shopId: string | null | undefined, options: Options = {}) {
-  const { onJoin, onUpdate, enabled = true, intervalMs = 5000 } = options;
+  const { onJoin, onUpdate, onStopped, enabled = true, intervalMs = 5000, maxFailures = 3 } = options;
   const onJoinRef = useRef(onJoin);
   const onUpdateRef = useRef(onUpdate);
+  const onStoppedRef = useRef(onStopped);
   onJoinRef.current = onJoin;
   onUpdateRef.current = onUpdate;
+  onStoppedRef.current = onStopped;
 
   useEffect(() => {
     if (!shopId || !enabled) return;
@@ -28,11 +32,20 @@ export function useQueueEvents(shopId: string | null | undefined, options: Optio
     let alive = true;
     let timer: ReturnType<typeof setTimeout> | undefined;
     const previousEntries = new Map<string, string>();
+    let failures = 0;
 
     const poll = async () => {
       try {
         const response = await fetch(`/api/queue/status/${shopId}`, { cache: "no-store" });
-        if (!response.ok) throw new Error(`Queue status request failed (${response.status})`);
+        if (!response.ok) {
+          failures += 1;
+          if (response.status === 410 || failures >= maxFailures) {
+            alive = false;
+            onStoppedRef.current?.(response.status === 410 ? "gone" : "unavailable");
+          }
+          return;
+        }
+        failures = 0;
         const payload = (await response.json()) as { data?: { entries?: Array<Record<string, unknown>> } };
         const entries = payload.data?.entries ?? [];
 
@@ -51,7 +64,11 @@ export function useQueueEvents(shopId: string | null | undefined, options: Optio
           if (!activeIds.has(entryId)) previousEntries.delete(entryId);
         }
       } catch {
-        // The dashboard query remains the slower fallback when a poll fails.
+        failures += 1;
+        if (failures >= maxFailures) {
+          alive = false;
+          onStoppedRef.current?.("unavailable");
+        }
       } finally {
         if (alive) timer = setTimeout(poll, intervalMs);
       }

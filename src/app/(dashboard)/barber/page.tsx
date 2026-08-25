@@ -102,6 +102,7 @@ export default function BarberDashboard() {
   const [available, setAvailable] = useState<boolean | null>(null);
   const [soundOn, setSoundOn] = useState(false);
   const [newEntryId, setNewEntryId] = useState<string | null>(null);
+  const [queuePollingStopped, setQueuePollingStopped] = useState(false);
 
   // Initialise sound state from localStorage after mount
   useEffect(() => {
@@ -118,7 +119,7 @@ export default function BarberDashboard() {
   const { data, isLoading } = useQuery<{ data: BarberDashData }>({
     queryKey: ["barber-dashboard"],
     queryFn: () => api.get("/api/dashboard/barber").then((r) => r.data),
-    refetchInterval: 30_000, // slow fallback poll; SSE handles real-time
+    refetchInterval: 30_000,
   });
 
   useEffect(() => {
@@ -150,7 +151,11 @@ export default function BarberDashboard() {
     queryClient.invalidateQueries({ queryKey: ["barber-dashboard"] });
   }, [queryClient]);
 
-  useQueueEvents(shopId, { onJoin: handleJoin, onUpdate: handleUpdate });
+  useQueueEvents(shopId, {
+    onJoin: handleJoin,
+    onUpdate: handleUpdate,
+    onStopped: () => setQueuePollingStopped(true),
+  });
 
   // ── Mutations ────────────────────────────────────────────────────────────────
   const availabilityMutation = useMutation({
@@ -281,6 +286,11 @@ export default function BarberDashboard() {
           </div>
 
           <div className="space-y-2">
+            {queuePollingStopped && (
+              <div className="rounded-xl border border-yellow-500/30 bg-yellow-500/10 px-3 py-2 text-xs text-yellow-200">
+                Queue updates paused because the queue service is unavailable. The dashboard will continue its slower refresh.
+              </div>
+            )}
             <AnimatePresence initial={false}>
               {d?.queue.map((entry) => {
                 const isNew = entry.id === newEntryId;
