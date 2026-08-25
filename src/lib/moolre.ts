@@ -4,12 +4,14 @@ const BASE_URL = (process.env.MOOLRE_BASE_URL || "https://sandbox.moolre.com").r
 type ApiCredentials = {
   apiUser: string;
   apiKey: string;
+  publicApiKey?: string;
   accountNumber: string;
 };
 
 const collectionCredentials: ApiCredentials = {
   apiUser: process.env.MOOLRE_COLLECTION_API_USER || process.env.MOOLRE_API_USER || "",
   apiKey: process.env.MOOLRE_COLLECTION_API_KEY || process.env.MOOLRE_API_KEY || "",
+  publicApiKey: process.env.MOOLRE_COLLECTION_API_PUBKEY || process.env.MOOLRE_API_PUBKEY || process.env.MOOLRE_API_KEY || "",
   accountNumber: process.env.MOOLRE_COLLECTION_ACCOUNT_NUMBER || process.env.MOOLRE_ACCOUNT_NUMBER || "",
 };
 
@@ -77,7 +79,9 @@ type TransferData = {
 };
 
 function normalizePhone(phone: string) {
-  return phone.replace(/^\+/, "").replace(/\s+/g, "");
+  const digits = phone.replace(/\D/g, "");
+  if (digits.startsWith("233") && digits.length === 12) return `0${digits.slice(3)}`;
+  return digits.startsWith("0") ? digits : `0${digits}`;
 }
 
 function requireValue(value: string, envName: string, feature: string) {
@@ -91,6 +95,13 @@ function apiHeaders(credentials: ApiCredentials, feature: string) {
   return {
     "X-API-USER": requireValue(credentials.apiUser, "MOOLRE_API_USER", feature),
     "X-API-KEY": requireValue(credentials.apiKey, "MOOLRE_API_KEY", feature),
+  };
+}
+
+function publicApiHeaders(credentials: ApiCredentials, feature: string) {
+  return {
+    "X-API-USER": requireValue(credentials.apiUser, "MOOLRE_API_USER", feature),
+    "X-API-PUBKEY": requireValue(credentials.publicApiKey ?? "", "MOOLRE_API_PUBKEY", feature),
   };
 }
 
@@ -148,7 +159,7 @@ export async function initiatePayment(
 
   return moolreRequest<string>(
     "/open/transact/payment",
-    apiHeaders(collectionCredentials, "payment collection"),
+    publicApiHeaders(collectionCredentials, "payment collection"),
     {
       type: 1,
       channel,

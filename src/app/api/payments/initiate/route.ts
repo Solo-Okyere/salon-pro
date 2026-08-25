@@ -65,7 +65,7 @@ export async function POST(req: NextRequest) {
         data: { status: "FAILED", failReason },
       });
       return NextResponse.json(
-        { success: false, message: "Payment initiation failed. Please try again." },
+        { success: false, message: `Payment provider rejected the request: ${failReason}` },
         { status: 502 }
       );
     }
